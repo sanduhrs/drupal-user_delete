@@ -1,0 +1,3 @@
+; $Id$
+name         = User Delete
+description  = "Let users delete their account."
