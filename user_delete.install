@@ -5,12 +5,10 @@ function user_delete_install() {
   switch ($GLOBALS['db_type']) {
     case 'mysql':
     case 'mysqli':
-//      db_query("CREATE TABLE {user_delete} (
-//                ) TYPE=MyISAM /*!40100 DEFAULT CHARACTER SET utf8 */;"
-//      );
       db_query("UPDATE {system} SET weight=-1 WHERE name='user_delete'");
       break;
     case 'pgsql':
+      db_query("UPDATE {system} SET weight=-1 WHERE name='user_delete'");
       break;
   }
 }
