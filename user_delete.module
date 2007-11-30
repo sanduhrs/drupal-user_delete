@@ -4,9 +4,9 @@
 /**
  * @file
  * Let users delete their account.
- * 
+ *
  * This module will be abandoned when http://drupal.org/node/8 is fixed.
- * 
+ *
  * @author
  * Stefan Auditor <stefan.auditor@erdfisch.de>
  */
@@ -34,7 +34,7 @@ function user_delete_menu($may_cache) {
       'type' => MENU_CALLBACK,
     );
   }
-  
+
   return $items;
 }
 
@@ -43,7 +43,7 @@ function user_delete_menu($may_cache) {
  */
 function user_delete_form_alter($form_id, &$form) {
   global $user;
-  
+
   if($form_id == 'user_edit') {
     //access check
     if(user_access('delete own account') && arg(1) == $user->uid) {

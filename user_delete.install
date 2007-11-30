@@ -1,6 +1,9 @@
 <?php
 /* $Id$ */
 
+/**
+ * Implementation of hook_install().
+ */
 function user_delete_install() {
   switch ($GLOBALS['db_type']) {
     case 'mysql':
