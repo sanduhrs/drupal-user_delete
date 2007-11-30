@@ -44,11 +44,25 @@ function user_delete_menu($may_cache) {
 function user_delete_form_alter($form_id, &$form) {
   global $user;
   
-  if($form_id == 'user_edit' AND (user_access('delete own account') && arg(1) == $user->uid)) {
-    $form['delete'] = array(
-      '#type' => 'submit',
-      '#value' => t('Delete'),
-      '#weight' => 31,
-    );
+  if($form_id == 'user_edit') {
+    //access check
+    if(user_access('delete own account') && arg(1) == $user->uid) {
+      $form['delete'] = array(
+        '#type' => 'submit',
+        '#value' => t('Delete'),
+        '#weight' => 31,
+      );
+    }
+  }
+}
+
+/**
+ * Implementation of hook_user().
+ */
+function user_delete_user($op, &$edit, &$account, $category = NULL) {
+  global $user;
+
+  if ($op == 'delete') {
+    drupal_goto(variable_get('site_frontpage', 'node'));
   }
 }
