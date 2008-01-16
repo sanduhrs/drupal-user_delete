@@ -62,7 +62,7 @@ function user_delete_form_alter($form_id, &$form) {
 function user_delete_user($op, &$edit, &$account, $category = NULL) {
   global $user;
 
-  if ($op == 'delete') {
+  if ($op == 'delete' && $user->uid == 0) {
       //Note: $account->uid is still available!
     drupal_goto(variable_get('site_frontpage', 'node'));
   }
