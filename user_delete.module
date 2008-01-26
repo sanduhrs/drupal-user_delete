@@ -33,10 +33,19 @@ function user_delete_menu($may_cache) {
       'access' => (user_access('administer users') || (user_access('delete own account') && arg(1) == $user->uid)),
       'type' => MENU_CALLBACK,
     );
+    $items[] = array(
+      'path' => 'admin/user/user_delete',
+      'title' => t('User delete'),
+      'description' => t("Configure the user delete action."),
+      'callback' => 'drupal_get_form',
+      'callback arguments' => 'user_delete_settings',
+      'access' => user_access('administer users'),
+    );
   }
 
   return $items;
 }
+
 
 /**
  * Implementation of hook_form_alter().
@@ -57,6 +66,26 @@ function user_delete_form_alter($form_id, &$form) {
 }
 
 /**
+ * Administrative settings page
+ *
+ * @return array
+ *   a form array
+ */
+function user_delete_settings() {
+  //TODO: add additional settings based on http://drupal.org/node/8#comment-628434
+  
+  $form['user_delete_redirect'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Redirection page'),
+    '#default_value' => variable_get('user_delete_redirect', '<front>'),
+    '#description' => t('Choose where to redirect your users after account deletion. Any valid Drupal path will do, e.g. %front or %node', array('%front' => '<front>', '%node' => 'node/1')),
+    '#required' => TRUE,
+  );
+  
+  return system_settings_form($form);
+}
+
+/**
  * Implementation of hook_user().
  */
 function user_delete_user($op, &$edit, &$account, $category = NULL) {
@@ -64,6 +93,8 @@ function user_delete_user($op, &$edit, &$account, $category = NULL) {
 
   //Note: $account->uid and $user->uid are still available!
   if ($op == 'delete' && ($account->uid == $user->uid)) {
+    //TODO: add additional actions based on http://drupal.org/node/8#comment-628434
+    
     drupal_goto(variable_get('site_frontpage', 'node'));
   }
 }
