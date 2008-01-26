@@ -95,6 +95,6 @@ function user_delete_user($op, &$edit, &$account, $category = NULL) {
   if ($op == 'delete' && ($account->uid == $user->uid)) {
     //TODO: add additional actions based on http://drupal.org/node/8#comment-628434
     
-    drupal_goto(variable_get('site_frontpage', 'node'));
+    drupal_goto(variable_get('user_delete_redirect', '<front>'));
   }
 }
