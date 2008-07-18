@@ -2,6 +2,13 @@
 /* $Id$ */
 
 /**
+ * User delete
+ * 
+ * @author 
+ * Stefan Auditor <stefan.auditor@erdfisch.de>
+ */
+
+/**
  * Implementation of hook_install().
  */
 function user_delete_install() {
@@ -14,11 +21,4 @@ function user_delete_install() {
       db_query("UPDATE {system} SET weight=-1 WHERE name='user_delete'");
       break;
   }
-}
-
-/**
- * Implementation of hook_uninstall();
- */
-function user_delete_uninstall() {
-  db_query('DROP TABLE {user_delete}');
 }
