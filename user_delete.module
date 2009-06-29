@@ -2,10 +2,15 @@
 /* $Id$ */
 
 /**
+ * User delete
+ * 
  * @file
- * Allows users to delete their own account.
+ * Let users delete their own account.
  *
  * This module will be abandoned when http://drupal.org/node/8 is fixed.
+ * 
+ * Note: As of January 8, 2009 - 09:44 the issue is marked as fixed.
+ * And commited to Drupal 7, see http://drupal.org/node/8#comment-1188824
  *
  * @author
  * Stefan Auditor <stefan.auditor@erdfisch.de>
@@ -29,14 +34,13 @@ function user_delete_menu() {
     'page arguments' => array('user_delete_settings'),
     'access arguments' => array('administer users'),
     'file' => 'user_delete.admin.inc',
-);
-
+  );
   return $items;
 }
 
 /**
-  * Implementation of hook_menu_alter().
-*/
+ * Implementation of hook_menu_alter().
+ */
 function user_delete_menu_alter(&$callbacks) {
   $callbacks['user/%user/delete']['access callback'] = 'user_delete_access';
   $callbacks['user/%user/delete']['access arguments'] = array(1);
@@ -47,8 +51,8 @@ function user_delete_menu_alter(&$callbacks) {
  * Checks whether a user can delete an account
  */
 function user_delete_access($account) {
-  	global $user;
-	return (user_access('administer users') || (user_access('delete own account') && $account->uid == $user->uid));
+  global $user;
+  return (user_access('administer users') || (user_access('delete own account') && $account->uid == $user->uid));
 }
 
 /**
@@ -62,9 +66,9 @@ function user_delete_form_user_profile_form_alter($form, &$form_state) {
       '#value' => t('Delete'),
       '#weight' => 31,
       '#submit' => array('user_edit_delete_submit'),
-	    );
+    );
   }
- }
+}
 
 /**
  * Implementation of hook_user().
