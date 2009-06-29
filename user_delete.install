@@ -22,3 +22,10 @@ function user_delete_install() {
       break;
   }
 }
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function user_delete_uninstall() {
+  variabel_del('user_delete_redirect');
+}
