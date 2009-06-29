@@ -9,6 +9,8 @@
  *
  * @author
  * Stefan Auditor <stefan.auditor@erdfisch.de>
+ * 
+ * Todo: backup data to /files
  */
 
 /**
@@ -30,7 +32,7 @@ function user_delete_menu($may_cache) {
       'path' => 'user/'. arg(1) .'/delete',
       'title' => t('Delete'),
       'callback' => 'user_edit',
-      'access' => (user_access('administer users') || (user_access('delete own account') && arg(1) == $user->uid)),
+      'access' => user_access('administer users') || (user_access('delete own account') && arg(1) == $user->uid),
       'type' => MENU_CALLBACK,
     );
     $items[] = array(
@@ -63,6 +65,82 @@ function user_delete_form_alter($form_id, &$form) {
       );
     }
   }
+  
+  if ($form_id == 'user_confirm_delete') {
+    $form['user_delete_action'] = array(
+      '#type' => 'radios',
+      '#title' => t('When deleting the account'),
+      '#default_value' => 'user_delete_block',
+      '#options' => array(
+        'user_delete_block' => t('Disable the account and keep all content.'),
+        'user_delete_block_unpublish' => t('Disable the account and unpublish all content.'),
+        'user_delete_reassign' => t('Delete the account and make all content belong to the <em>Anonymous user</em>.'),
+        'user_delete_delete' => t('Delete the account and all content.'),
+      ),
+      '#weight' => 0,
+    );
+    $form['#submit'] = array('user_delete_submit' => array());
+  }
+}
+
+function user_delete_submit($form_id, $form_values) {
+  global $user;
+  $op = $form_values['user_delete_action'];
+  $uid = $form_values['uid'];
+  $account = user_load(array('uid' => $uid));
+  
+  if (!$account) {
+    drupal_set_message(t('The user account %id does not exist.', array('%id' => $uid)), 'error');
+    watchdog('user', 'Attempted to cancel non-existing user account: %id.', array('%id' => $uid), WATCHDOG_ERROR);
+    return;
+  }
+  
+  switch ($op) {
+    case 'user_delete_block':
+      // block user
+      db_query("UPDATE {users} SET status = 0 WHERE uid = %d", $uid);
+      break;
+    case 'user_delete_block_unpublish':
+      // block user
+      db_query("UPDATE {users} SET status = 0 WHERE uid = %d", $uid);
+      // unpublish content
+      db_query("UPDATE {node} SET status = 0 WHERE uid = %d", $uid);
+      db_query("UPDATE {comments} SET status = 0 WHERE uid = %d", $uid);
+      break;
+    case 'user_delete_reassign':
+      // reassign content
+      db_query("UPDATE {node} SET uid = 0 WHERE uid = %d", $uid);
+      db_query("UPDATE {comments} SET uid = 0 WHERE uid = %d", $uid);
+      // delete account
+      user_delete($form_values, $uid);
+      break;
+    case 'user_delete_delete':
+      // delete nodes
+      $result = db_query("SELECT nid FROM {node} WHERE uid = %d", $uid);
+      while ($row = db_fetch_object($result)) {
+        user_delete_node_delete($row->nid);
+      }
+      // delete comments
+      $result = db_query("SELECT cid FROM {comments} WHERE uid = %d", $uid);
+      while ($row = db_fetch_object($result)) {
+        comment_delete($row->cid);
+      }
+      // delete user
+      user_delete($form_values, $uid);
+      break;
+  }
+
+  // After cancelling account, ensure that user is logged out.
+  
+  // Destroy the current session.
+  db_query("DELETE FROM {sessions} WHERE uid = %d", $account->uid);
+  if ($account->uid == $user->uid) {
+    // Load the anonymous user.
+    $user = drupal_anonymous_user();
+  }
+
+  // Clear the cache for anonymous users.
+  cache_clear_all();
 }
 
 /**
@@ -73,34 +151,34 @@ function user_delete_form_alter($form_id, &$form) {
  */
 function user_delete_settings() {
   //TODO: add additional settings based on http://drupal.org/node/8#comment-628434
-  
   $form['user_delete_redirect'] = array(
     '#type' => 'textfield',
     '#title' => t('Redirection page'),
     '#default_value' => variable_get('user_delete_redirect', '<front>'),
     '#description' => t('Choose where to redirect your users after account deletion. Any valid Drupal path will do, e.g. %front or %node', array('%front' => '<front>', '%node' => 'node/1')),
     '#required' => TRUE,
-  );
-  
+  );  
   return system_settings_form($form);
 }
 
-/**
- * Implementation of hook_user().
- */
-function user_delete_user($op, &$edit, &$account, $category = NULL) {
-  global $user;
+function user_delete_node_delete($nid) {
 
-  //Note: $account->uid and $user->uid are still available!
-  if ($op == 'delete' && ($account->uid == $user->uid)) {
-    //TODO: add additional actions based on http://drupal.org/node/8#comment-628434
-    
-    //Imitate default behaviour
-    //Assign all nodes and comments to anonymous
-    db_query("UPDATE {node} SET uid=0 WHERE uid=%d", $account->uid);
-    db_query("UPDATE {comments} SET uid=0 WHERE uid=%d", $account->uid);
-    
-    //Redirect
-    drupal_goto(variable_get('user_delete_redirect', '<front>'));
+  $node = node_load($nid);
+  
+  db_query('DELETE FROM {node} WHERE nid = %d', $node->nid);
+  db_query('DELETE FROM {node_revisions} WHERE nid = %d', $node->nid);
+
+  // Call the node-specific callback (if any):
+  node_invoke($node, 'delete');
+  node_invoke_nodeapi($node, 'delete');
+
+  // Clear the cache so an anonymous poster can see the node being deleted.
+  cache_clear_all();
+
+  // Remove this node from the search index if needed.
+  if (function_exists('search_wipe')) {
+    search_wipe($node->nid, 'node');
   }
+  drupal_set_message(t('%title has been deleted.', array('%title' => $node->title)));
+  watchdog('content', t('@type: deleted %title.', array('@type' => t($node->type), '%title' => $node->title)));
 }
