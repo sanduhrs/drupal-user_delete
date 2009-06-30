@@ -13,6 +13,8 @@
  * Todo: backup data to /files
  */
 
+define('USER_DELETE_FILE_PATH', file_directory_path() .'/user_delete_backup');
+
 /**
  * Implementation of hook_perm().
  */
@@ -48,7 +50,6 @@ function user_delete_menu($may_cache) {
   return $items;
 }
 
-
 /**
  * Implementation of hook_form_alter().
  */
@@ -67,6 +68,14 @@ function user_delete_form_alter($form_id, &$form) {
   }
   
   if ($form_id == 'user_confirm_delete') {
+    $backup = variable_get('user_delete_backup', 0);
+    if ($backup) {
+      $period = variable_get('user_delete_backup_period', 60*60*24*7*12);
+      $form['user_delete_remark'] = array(
+        '#value' => t('All data that is being deleted will be backed up for %period and automatically deleted afterwards.', array('%period' => format_interval($period, 2))),
+        '#weight' => 0,
+      );
+    }
     $form['user_delete_action'] = array(
       '#type' => 'radios',
       '#title' => t('When deleting the account'),
@@ -83,11 +92,15 @@ function user_delete_form_alter($form_id, &$form) {
   }
 }
 
+/**
+ * Deal with the user/content after form submission
+ */
 function user_delete_submit($form_id, $form_values) {
   global $user;
   $op = $form_values['user_delete_action'];
   $uid = $form_values['uid'];
   $account = user_load(array('uid' => $uid));
+  $backup = variable_get('user_delete_backup', 0);
   
   if (!$account) {
     drupal_set_message(t('The user account %id does not exist.', array('%id' => $uid)), 'error');
@@ -115,15 +128,32 @@ function user_delete_submit($form_id, $form_values) {
       user_delete($form_values, $uid);
       break;
     case 'user_delete_delete':
-      // delete nodes
-      $result = db_query("SELECT nid FROM {node} WHERE uid = %d", $uid);
-      while ($row = db_fetch_object($result)) {
-        user_delete_node_delete($row->nid);
-      }
+      // TODO: Deleting/Backing-up nodes and comments should be done with
+      // http://drupal.org/project/batchapi
+
       // delete comments
       $result = db_query("SELECT cid FROM {comments} WHERE uid = %d", $uid);
       while ($row = db_fetch_object($result)) {
+        // backup
+        if ($backup) {
+          $comment = _comment_load($row->cid);
+          user_delete_backup($account, $comment);
+        }
         comment_delete($row->cid);
+      }
+      // delete nodes
+      $result = db_query("SELECT nid FROM {node} WHERE uid = %d", $uid);
+      while ($row = db_fetch_object($result)) {
+        // backup
+        if ($backup) {
+          $node = node_load($row->nid);
+          user_delete_backup($account, $node);
+        }
+        user_delete_node_delete($row->nid);
+      }
+      // backup
+      if ($backup) {
+        user_delete_backup($account);
       }
       // delete user
       user_delete($form_values, $uid);
@@ -156,17 +186,51 @@ function user_delete_submit($form_id, $form_values) {
  *   a form array
  */
 function user_delete_settings() {
+  
   //TODO: add additional settings based on http://drupal.org/node/8#comment-628434
-  $form['user_delete_redirect'] = array(
+  $form['redirect'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Redirect'),
+  );
+  $form['redirect']['user_delete_redirect'] = array(
     '#type' => 'textfield',
     '#title' => t('Redirection page'),
     '#default_value' => variable_get('user_delete_redirect', ''),
     '#description' => t('Choose where to redirect your users after account deletion. Any valid Drupal path will do, e.g. %front or %node', array('%front' => '<front>', '%node' => 'node/1')),
-    '#required' => TRUE,
-  );  
+  );
+  $form['backup'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Backup'),
+  );
+  $form['backup']['user_delete_backup'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Backup data'),
+    '#default_value' => variable_get('user_delete_backup', 0),
+    '#description' => t('Backup data that is being deleted to the filesystem.'),
+  );
+  $options = array(
+    60*60*24*7 => format_interval(60*60*24*7, 2),
+    60*60*24*7*2 => format_interval(60*60*24*7*2, 2),
+    60*60*24*7*4 => format_interval(60*60*24*7*4, 2),
+    60*60*24*7*8 => format_interval(60*60*24*7*8, 2),
+    60*60*24*7*12 => format_interval(60*60*24*7*12, 2),
+    60*60*24*7*16 => format_interval(60*60*24*7*16, 2),
+    60*60*24*7*24 => format_interval(60*60*24*7*24, 2),
+  );
+  $form['backup']['user_delete_backup_period'] = array(
+    '#type' => 'select',
+    '#title' => t('Keep backup time'),
+    '#default_value' => variable_get('user_delete_backup_period', 60*60*24*7*12),
+    '#options' => $options,
+    '#description' => t('The time frame after which the backup should be deleted from the filesystem.'),
+  );
   return system_settings_form($form);
 }
 
+/**
+ * A copy from node_delete() whithout access check
+ * see http://api.drupal.org/api/function/node_delete/5
+ */
 function user_delete_node_delete($nid) {
 
   $node = node_load($nid);
@@ -187,4 +251,87 @@ function user_delete_node_delete($nid) {
   }
   drupal_set_message(t('%title has been deleted.', array('%title' => $node->title)));
   watchdog('content', t('@type: deleted %title.', array('@type' => t($node->type), '%title' => $node->title)));
+}
+
+/**
+ * Implementation of hook_cron().
+ */
+function user_delete_cron() {
+  user_delete_backup_scan_expired();
+}
+
+/**
+ * Backup an user/node/comment object to the filesystem
+ */
+function user_delete_backup($account, $object = NULL) {
+  // check for directory
+  $dir = USER_DELETE_FILE_PATH;
+  file_check_directory($dir, TRUE);
+  
+  file_check_directory($dir, TRUE);
+  $backup_dir = $dir .'/'. check_plain($account->name);
+  file_check_directory($backup_dir, TRUE);
+  
+  if (is_numeric($object->cid)) {
+    $dest = $backup_dir . '/comments';
+    file_check_directory($dest, TRUE);
+    $dest = $dest . '/comment-' . $object->cid . '.txt';
+  }
+  else if (is_numeric($object->nid)) {
+    $dest = $backup_dir . '/nodes';
+    file_check_directory($dest, TRUE);
+    $dest = $dest . '/node-' . $object->nid . '.txt';
+  }
+  else {
+    $dest = $backup_dir;
+    $object = $account;
+    file_check_directory($dest, TRUE);
+    $dest = $dest . '/user-' . $object->uid . '.txt';
+  }
+  
+  $data = serialize((array) $object);
+  file_save_data($data, $dest, FILE_EXISTS_REPLACE);
+}
+
+/**
+ * Scan for and delete expired files
+ */
+function user_delete_backup_scan_expired() {
+  // check for directory
+  $dir = USER_DELETE_FILE_PATH;
+  if (file_check_directory($dir, TRUE)) {  
+    file_scan_directory($dir, '.*', array('.', '..', 'CVS'), 'user_delete_backup_remove_expired', FALSE);
+  }
+}
+
+/**
+ * Check if a folder is expired and delete
+ */
+function user_delete_backup_remove_expired($filename) {
+  $period = variable_get('user_delete_backup_period', 60*60*24*7*12);
+  $created = filemtime($filename);
+  if ($created && (time() >= ($created + $period))) {
+    user_delete_backup_remove_dir($filename);
+  }
+}
+
+/**
+ * Recursive delete a folder with files
+ */
+function user_delete_backup_remove_dir($dir) {
+  if (!file_exists($dir)) {
+    return true;
+  }
+  if (!is_dir($dir)) {
+    return unlink($dir);
+  }
+  foreach (scandir($dir) as $item) {
+    if ($item == '.' || $item == '..') {
+      continue;
+    }
+    if (!user_delete_backup_remove_dir($dir.DIRECTORY_SEPARATOR.$item)) {
+      return false;
+    }
+  }
+  return rmdir($dir);
 }

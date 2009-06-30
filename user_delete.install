@@ -28,4 +28,6 @@ function user_delete_install() {
  */
 function user_delete_uninstall() {
   variabel_del('user_delete_redirect');
+  variable_del('user_delete_backup');
+  variable_del('user_delete_backup_period');
 }
