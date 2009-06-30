@@ -2,15 +2,18 @@
 /* $Id$ */
 
 /**
+ * User delete
+ * 
  * @file
- * Allows users to delete their own account.
+ * Let users to delete their own account.
  *
  * This module will be abandoned when http://drupal.org/node/8 is fixed.
+ * 
+ * Note: As of January 8, 2009 - 09:44 the issue is marked as fixed.
+ * And commited to Drupal 7, see http://drupal.org/node/8#comment-1188824
  *
  * @author
  * Stefan Auditor <stefan.auditor@erdfisch.de>
- * 
- * Todo: backup data to /files
  */
 
 define('USER_DELETE_FILE_PATH', file_directory_path() .'/user_delete_backup');
