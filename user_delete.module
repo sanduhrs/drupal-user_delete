@@ -18,6 +18,7 @@
  * TODO:
  * Double check comment backup function
  * Allow to admin defined a default setting for normal users
+ * Integrate with batchapi
  */
 
 define('USER_DELETE_FILE_PATH', file_directory_path() .'/user_delete_backup');
