@@ -14,6 +14,10 @@
  *
  * @author
  * Stefan Auditor <stefan.auditor@erdfisch.de>
+ * 
+ * TODO:
+ * Double check comment backup function
+ * Allow to admin defined a default setting for normal users
  */
 
 define('USER_DELETE_FILE_PATH', file_directory_path() .'/user_delete_backup');
