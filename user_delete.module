@@ -91,6 +91,7 @@ function user_delete_form_alter($form_id, &$form) {
       ),
       '#weight' => 0,
     );
+    $form['#redirect'] = 'user/' . $form['uid']['#value'];
     $form['#submit'] = array('user_delete_submit' => array());
   }
 }
@@ -115,6 +116,7 @@ function user_delete_submit($form_id, $form_values) {
     case 'user_delete_block':
       // block user
       db_query("UPDATE {users} SET status = 0 WHERE uid = %d", $uid);
+      drupal_set_message(t('%name has been blocked.', array('%name' => check_plain($account->name))));
       break;
     case 'user_delete_block_unpublish':
       // block user
@@ -122,18 +124,28 @@ function user_delete_submit($form_id, $form_values) {
       // unpublish content
       db_query("UPDATE {node} SET status = 0 WHERE uid = %d", $uid);
       db_query("UPDATE {comments} SET status = 1 WHERE uid = %d", $uid);
+      
+      drupal_set_message(t('%name has been blocked, all submitted content from that user has benn unpublished.', array('%name' => check_plain($account->name))));
       break;
     case 'user_delete_reassign':
+      // Set redirect
+      $redirect = variable_get('user_delete_redirect', 'node');
+      
       // reassign content
       db_query("UPDATE {node} SET uid = 0 WHERE uid = %d", $uid);
       db_query("UPDATE {comments} SET uid = 0 WHERE uid = %d", $uid);
       // delete account
       user_delete($form_values, $uid);
+      
+      drupal_set_message(t('All submitted content from %name has benn reassigned to %anonymous.', array('%name' => check_plain($account->name), '%anonymous' => variable_get('anonymous', t('Anonymous')))));
       break;
     case 'user_delete_delete':
       // TODO: Deleting/Backing-up nodes and comments should be done with
       // http://drupal.org/project/batchapi
-
+      
+      // Set redirect
+      $redirect = variable_get('user_delete_redirect', 'node');
+      
       // delete comments
       $result = db_query("SELECT cid FROM {comments} WHERE uid = %d", $uid);
       while ($row = db_fetch_object($result)) {
@@ -160,6 +172,8 @@ function user_delete_submit($form_id, $form_values) {
       }
       // delete user
       user_delete($form_values, $uid);
+      
+      drupal_set_message(t('All submitted content from %name has been deleted.', array('%name' => check_plain($account->name), '!anonymous' => variable_get('anonymous', t('Anonymous')))));
       break;
   }
 
@@ -170,90 +184,17 @@ function user_delete_submit($form_id, $form_values) {
   if ($account->uid == $user->uid) {
     // Load the anonymous user.
     $user = drupal_anonymous_user();
+    // Set redirect
+    $redirect = variable_get('user_delete_redirect', 'node');
   }
 
   // Clear the cache for anonymous users.
   cache_clear_all();
   
   // Redirect
-  $redirect = variable_get('user_delete_redirect', '');
-  if ($redirect !== '') {
+  if (!empty($redirect)) {
     drupal_goto($redirect);
   }
-}
-
-/**
- * Administrative settings page
- *
- * @return array
- *   a form array
- */
-function user_delete_settings() {
-  
-  //TODO: add additional settings based on http://drupal.org/node/8#comment-628434
-  $form['redirect'] = array(
-    '#type' => 'fieldset',
-    '#title' => t('Redirect'),
-  );
-  $form['redirect']['user_delete_redirect'] = array(
-    '#type' => 'textfield',
-    '#title' => t('Redirection page'),
-    '#default_value' => variable_get('user_delete_redirect', ''),
-    '#description' => t('Choose where to redirect your users after account deletion. Any valid Drupal path will do, e.g. %front or %node', array('%front' => '<front>', '%node' => 'node/1')),
-  );
-  $form['backup'] = array(
-    '#type' => 'fieldset',
-    '#title' => t('Backup'),
-  );
-  $form['backup']['user_delete_backup'] = array(
-    '#type' => 'checkbox',
-    '#title' => t('Backup data'),
-    '#default_value' => variable_get('user_delete_backup', 0),
-    '#description' => t('Backup data that is being deleted to the filesystem.'),
-  );
-  $options = array(
-    60*60*24*7 => format_interval(60*60*24*7, 2),
-    60*60*24*7*2 => format_interval(60*60*24*7*2, 2),
-    60*60*24*7*4 => format_interval(60*60*24*7*4, 2),
-    60*60*24*7*8 => format_interval(60*60*24*7*8, 2),
-    60*60*24*7*12 => format_interval(60*60*24*7*12, 2),
-    60*60*24*7*16 => format_interval(60*60*24*7*16, 2),
-    60*60*24*7*24 => format_interval(60*60*24*7*24, 2),
-  );
-  $form['backup']['user_delete_backup_period'] = array(
-    '#type' => 'select',
-    '#title' => t('Keep backup time'),
-    '#default_value' => variable_get('user_delete_backup_period', 60*60*24*7*12),
-    '#options' => $options,
-    '#description' => t('The time frame after which the backup should be deleted from the filesystem.'),
-  );
-  return system_settings_form($form);
-}
-
-/**
- * A copy from node_delete() whithout access check
- * see http://api.drupal.org/api/function/node_delete/5
- */
-function user_delete_node_delete($nid) {
-
-  $node = node_load($nid);
-  
-  db_query('DELETE FROM {node} WHERE nid = %d', $node->nid);
-  db_query('DELETE FROM {node_revisions} WHERE nid = %d', $node->nid);
-
-  // Call the node-specific callback (if any):
-  node_invoke($node, 'delete');
-  node_invoke_nodeapi($node, 'delete');
-
-  // Clear the cache so an anonymous poster can see the node being deleted.
-  cache_clear_all();
-
-  // Remove this node from the search index if needed.
-  if (function_exists('search_wipe')) {
-    search_wipe($node->nid, 'node');
-  }
-  drupal_set_message(t('%title has been deleted.', array('%title' => $node->title)));
-  watchdog('content', t('@type: deleted %title.', array('@type' => t($node->type), '%title' => $node->title)));
 }
 
 /**
@@ -269,26 +210,26 @@ function user_delete_cron() {
 function user_delete_backup($account, $object = NULL) {
   // check for directory
   $dir = USER_DELETE_FILE_PATH;
-  file_check_directory($dir, TRUE);
+  user_delete_file_check_directory($dir, TRUE);
   
   file_check_directory($dir, TRUE);
   $backup_dir = $dir .'/'. check_plain($account->name);
-  file_check_directory($backup_dir, TRUE);
+  user_delete_file_check_directory($backup_dir, TRUE);
   
   if (is_numeric($object->cid)) {
     $dest = $backup_dir . '/comments';
-    file_check_directory($dest, TRUE);
+    user_delete_file_check_directory($dest, TRUE);
     $dest = $dest . '/comment-' . $object->cid . '.txt';
   }
   else if (is_numeric($object->nid)) {
     $dest = $backup_dir . '/nodes';
-    file_check_directory($dest, TRUE);
+    user_delete_file_check_directory($dest, TRUE);
     $dest = $dest . '/node-' . $object->nid . '.txt';
   }
   else {
     $dest = $backup_dir;
     $object = $account;
-    file_check_directory($dest, TRUE);
+    user_delete_file_check_directory($dest, TRUE);
     $dest = $dest . '/user-' . $object->uid . '.txt';
   }
   
@@ -337,4 +278,126 @@ function user_delete_backup_remove_dir($dir) {
     }
   }
   return rmdir($dir);
+}
+
+/**
+ * Copy of node_delete() whithout access check and drupal_set_message().
+ * see http://api.drupal.org/api/function/node_delete/5
+ */
+function user_delete_node_delete($nid) {
+
+  $node = node_load($nid);
+  
+  db_query('DELETE FROM {node} WHERE nid = %d', $node->nid);
+  db_query('DELETE FROM {node_revisions} WHERE nid = %d', $node->nid);
+
+  // Call the node-specific callback (if any):
+  node_invoke($node, 'delete');
+  node_invoke_nodeapi($node, 'delete');
+
+  // Clear the cache so an anonymous poster can see the node being deleted.
+  cache_clear_all();
+
+  // Remove this node from the search index if needed.
+  if (function_exists('search_wipe')) {
+    search_wipe($node->nid, 'node');
+  }
+  //drupal_set_message(t('%title has been deleted.', array('%title' => $node->title)));
+  watchdog('content', t('@type: deleted %title.', array('@type' => t($node->type), '%title' => $node->title)));
+}
+
+/**
+ * Copy of file_check_directory() without drupal_set_message().
+ */
+function user_delete_file_check_directory(&$directory, $mode = 0, $form_item = NULL) {
+  $directory = rtrim($directory, '/\\');
+
+  // Check if directory exists.
+  if (!is_dir($directory)) {
+    if (($mode & FILE_CREATE_DIRECTORY) && @mkdir($directory)) {
+      //drupal_set_message(t('The directory %directory has been created.', array('%directory' => $directory)));
+      @chmod($directory, 0775); // Necessary for non-webserver users.
+    }
+    else {
+      if ($form_item) {
+        form_set_error($form_item, t('The directory %directory does not exist.', array('%directory' => $directory)));
+      }
+      return FALSE;
+    }
+  }
+
+  // Check to see if the directory is writable.
+  if (!is_writable($directory)) {
+    if (($mode & FILE_MODIFY_PERMISSIONS) && @chmod($directory, 0775)) {
+      //drupal_set_message(t('The permissions of directory %directory have been changed to make it writable.', array('%directory' => $directory)));
+    }
+    else {
+      form_set_error($form_item, t('The directory %directory is not writable', array('%directory' => $directory)));
+      watchdog('file system', 'The directory %directory is not writable, because it does not have the correct permissions set.', array('%directory' => $directory), WATCHDOG_ERROR);
+      return FALSE;
+    }
+  }
+
+  if ((file_directory_path() == $directory || file_directory_temp() == $directory) && !is_file("$directory/.htaccess")) {
+    $htaccess_lines = "SetHandler Drupal_Security_Do_Not_Remove_See_SA_2006_006\nOptions None\nOptions +FollowSymLinks";
+    if (($fp = fopen("$directory/.htaccess", 'w')) && fputs($fp, $htaccess_lines)) {
+      fclose($fp);
+      chmod($directory .'/.htaccess', 0664);
+    }
+    else {
+      $variables = array('%directory' => $directory, '!htaccess' => '<br />'. nl2br(check_plain($htaccess_lines)));
+      form_set_error($form_item, t("Security warning: Couldn't write .htaccess file. Please create a .htaccess file in your %directory directory which contains the following lines: <code>!htaccess</code>", $variables));
+      watchdog('security', "Security warning: Couldn't write .htaccess file. Please create a .htaccess file in your %directory directory which contains the following lines: <code>!htaccess</code>", $variables, WATCHDOG_ERROR);
+    }
+  }
+
+  return TRUE;
+}
+
+/**
+ * Administrative settings page
+ *
+ * @return array
+ *   a form array
+ */
+function user_delete_settings() {
+  
+  //TODO: add additional settings based on http://drupal.org/node/8#comment-628434
+  $form['redirect'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Redirect'),
+  );
+  $form['redirect']['user_delete_redirect'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Redirection page'),
+    '#default_value' => variable_get('user_delete_redirect', 'node'),
+    '#description' => t('Choose where to redirect your users after account deletion. Any valid Drupal path will do, e.g. %front or %node', array('%front' => '<front>', '%node' => 'node/1')),
+  );
+  $form['backup'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Backup'),
+  );
+  $form['backup']['user_delete_backup'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Backup data'),
+    '#default_value' => variable_get('user_delete_backup', 0),
+    '#description' => t('Backup data that is being deleted to the filesystem.'),
+  );
+  $options = array(
+    60*60*24*7 => format_interval(60*60*24*7, 2),
+    60*60*24*7*2 => format_interval(60*60*24*7*2, 2),
+    60*60*24*7*4 => format_interval(60*60*24*7*4, 2),
+    60*60*24*7*8 => format_interval(60*60*24*7*8, 2),
+    60*60*24*7*12 => format_interval(60*60*24*7*12, 2),
+    60*60*24*7*16 => format_interval(60*60*24*7*16, 2),
+    60*60*24*7*24 => format_interval(60*60*24*7*24, 2),
+  );
+  $form['backup']['user_delete_backup_period'] = array(
+    '#type' => 'select',
+    '#title' => t('Keep backup time'),
+    '#default_value' => variable_get('user_delete_backup_period', 60*60*24*7*12),
+    '#options' => $options,
+    '#description' => t('The time frame after which the backup should be deleted from the filesystem.'),
+  );
+  return system_settings_form($form);
 }
