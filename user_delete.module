@@ -121,7 +121,7 @@ function user_delete_submit($form_id, $form_values) {
       db_query("UPDATE {users} SET status = 0 WHERE uid = %d", $uid);
       // unpublish content
       db_query("UPDATE {node} SET status = 0 WHERE uid = %d", $uid);
-      db_query("UPDATE {comments} SET status = 0 WHERE uid = %d", $uid);
+      db_query("UPDATE {comments} SET status = 1 WHERE uid = %d", $uid);
       break;
     case 'user_delete_reassign':
       // reassign content
