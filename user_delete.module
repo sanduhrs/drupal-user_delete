@@ -5,7 +5,7 @@
  * User delete
  * 
  * @file
- * Let users to delete their own account.
+ * Let users delete their own account.
  *
  * This module will be abandoned when http://drupal.org/node/8 is fixed.
  * 
