@@ -16,6 +16,8 @@
  * Stefan Auditor <stefan.auditor@erdfisch.de>
  */
 
+define('USER_DELETE_FILE_PATH', file_directory_path() .'/user_delete_backup');
+
 /**
  * Implementation of hook_perm().
  */
@@ -39,15 +41,6 @@ function user_delete_menu() {
 }
 
 /**
- * Implementation of hook_menu_alter().
- */
-function user_delete_menu_alter(&$callbacks) {
-  $callbacks['user/%user/delete']['access callback'] = 'user_delete_access';
-  $callbacks['user/%user/delete']['access arguments'] = array(1);
-  $callbacks['user/%user/delete']['type'] = MENU_LOCAL_TASK;
-}
-
-/**
  * Checks whether a user can delete an account
  */
 function user_delete_access($account) {
@@ -56,36 +49,252 @@ function user_delete_access($account) {
 }
 
 /**
- * Implementation of hook_form_user_profile_form_alter().
-*/
-function user_delete_form_user_profile_form_alter($form, &$form_state) {
+ * Implementation of hook_menu_alter().
+ */
+function user_delete_menu_alter(&$callbacks) {
+  $callbacks['user/%user/delete']['access callback'] = 'user_delete_access';
+  $callbacks['user/%user/delete']['access arguments'] = array(1);
+  $callbacks['user/%user/delete']['type'] = MENU_CALLBACK;
+}
+
+/**
+ * Implementation of hook_form_alter().
+ */
+function user_delete_form_alter(&$form, $form_state, $form_id) {
   global $user;
-  if (user_access('delete own account') && arg(1) == $user->uid) {
-    $form['delete'] = array(
-      '#type' => 'submit',
-      '#value' => t('Delete'),
-      '#weight' => 31,
-      '#submit' => array('user_edit_delete_submit'),
+
+  if($form_id == 'user_profile_form') {
+    //access check
+    if(user_access('delete own account') && arg(1) == $user->uid) {
+      $form['delete'] = array(
+        '#type' => 'submit',
+        '#value' => t('Delete'),
+        '#weight' => 31,
+        '#submit' => array('user_edit_delete_submit'),
+      );
+    }
+  }
+  
+  if ($form_id == 'user_confirm_delete') {
+    //drupal_set_message('<pre>' . print_r($form, 1) . '</pre>');
+    $backup = variable_get('user_delete_backup', 0);
+    if ($backup) {
+      $period = variable_get('user_delete_backup_period', 60*60*24*7*12);
+      $form['user_delete_remark'] = array(
+        '#value' => t('All data that is being deleted will be backed up for %period and automatically deleted afterwards.', array('%period' => format_interval($period, 2))),
+        '#weight' => -10,
+      );
+    }
+    $form['user_delete_action'] = array(
+      '#type' => 'radios',
+      '#title' => t('When deleting the account'),
+      '#default_value' => 'user_delete_block',
+      '#options' => array(
+        'user_delete_block' => t('Disable the account and keep all content.'),
+        'user_delete_block_unpublish' => t('Disable the account and unpublish all content.'),
+        'user_delete_reassign' => t('Delete the account and make all content belong to the <em>Anonymous user</em>.'),
+        'user_delete_delete' => t('Delete the account and all content.'),
+      ),
+      '#weight' => 0,
     );
+    $form['#submit'] = array('user_delete_submit');
+    //drupal_set_message('<pre>' . print_r($form, 1) . '</pre>');
   }
 }
 
 /**
- * Implementation of hook_user().
+ * Deal with the user/content after form submission
  */
-function user_delete_user($op, &$edit, &$account, $category = NULL) {
+function user_delete_submit($form, &$form_state) {
   global $user;
 
-  //Note: $account->uid and $user->uid are still available!
-  if ($op == 'delete' && ($account->uid == $user->uid)) {
-    //TODO: add additional actions based on http://drupal.org/node/8#comment-628434
-    
-    //Imitate default behaviour
-    //Assign all nodes and comments to anonymous
-    db_query("UPDATE {node} SET uid=0 WHERE uid=%d", $account->uid);
-    db_query("UPDATE {comments} SET uid=0 WHERE uid=%d", $account->uid);
-    
-    //Redirect
-    drupal_goto(variable_get('user_delete_redirect', '<front>'));
+  $op = $form_state['values']['user_delete_action'];
+  $uid = $form_state['values']['_account']->uid;
+  $account = user_load(array('uid' => $uid));
+  $backup = variable_get('user_delete_backup', 0);
+  
+  if (!$account) {
+    drupal_set_message(t('The user account %id does not exist.', array('%id' => $uid)), 'error');
+    watchdog('user', 'Attempted to cancel non-existing user account: %id.', array('%id' => $uid), WATCHDOG_ERROR);
+    return;
   }
+  
+  switch ($op) {
+    case 'user_delete_block':
+      // block user
+      db_query("UPDATE {users} SET status = 0 WHERE uid = %d", $uid);
+      break;
+    case 'user_delete_block_unpublish':
+      // block user
+      db_query("UPDATE {users} SET status = 0 WHERE uid = %d", $uid);
+      // unpublish content
+      db_query("UPDATE {node} SET status = 0 WHERE uid = %d", $uid);
+      db_query("UPDATE {comments} SET status = 1 WHERE uid = %d", $uid);
+      break;
+    case 'user_delete_reassign':
+      // reassign content
+      db_query("UPDATE {node} SET uid = 0 WHERE uid = %d", $uid);
+      db_query("UPDATE {comments} SET uid = 0 WHERE uid = %d", $uid);
+      // delete account
+//      user_delete($form_values, $uid);
+      break;
+    case 'user_delete_delete':
+      // TODO: Deleting/Backing-up nodes and comments should be done with
+      // http://drupal.org/project/batchapi
+
+      // delete comments
+      $result = db_query("SELECT cid FROM {comments} WHERE uid = %d", $uid);
+      while ($row = db_fetch_object($result)) {
+        // backup
+        if ($backup) {
+          $comment = _comment_load($row->cid);
+          user_delete_backup($account, $comment);
+        }
+//        comment_delete($row->cid);
+      }
+      // delete nodes
+      $result = db_query("SELECT nid FROM {node} WHERE uid = %d", $uid);
+      while ($row = db_fetch_object($result)) {
+        // backup
+        if ($backup) {
+          $node = node_load($row->nid);
+          user_delete_backup($account, $node);
+        }
+//        user_delete_node_delete($row->nid);
+      }
+      // backup
+      if ($backup) {
+        user_delete_backup($account);
+      }
+      // delete user
+//      user_delete($form_values, $uid);
+      break;
+  }
+
+  // After cancelling account, ensure that user is logged out.
+  
+  // Destroy the current session.
+  db_query("DELETE FROM {sessions} WHERE uid = %d", $account->uid);
+  if ($account->uid == $user->uid) {
+    // Load the anonymous user.
+    $user = drupal_anonymous_user();
+  }
+
+  // Clear the cache for anonymous users.
+  cache_clear_all();
+  
+  // Redirect
+  $redirect = variable_get('user_delete_redirect', '');
+  if ($redirect !== '') {
+    drupal_goto($redirect);
+  }
+}
+
+/**
+ * A copy from node_delete() whithout access check
+ * see http://api.drupal.org/api/function/node_delete/5
+ */
+function user_delete_node_delete($nid) {
+
+  $node = node_load($nid);
+  
+  db_query('DELETE FROM {node} WHERE nid = %d', $node->nid);
+  db_query('DELETE FROM {node_revisions} WHERE nid = %d', $node->nid);
+
+  // Call the node-specific callback (if any):
+  node_invoke($node, 'delete');
+  node_invoke_nodeapi($node, 'delete');
+
+  // Clear the cache so an anonymous poster can see the node being deleted.
+  cache_clear_all();
+
+  // Remove this node from the search index if needed.
+  if (function_exists('search_wipe')) {
+    search_wipe($node->nid, 'node');
+  }
+  drupal_set_message(t('%title has been deleted.', array('%title' => $node->title)));
+  watchdog('content', t('@type: deleted %title.', array('@type' => t($node->type), '%title' => $node->title)));
+}
+
+/**
+ * Implementation of hook_cron().
+ */
+function user_delete_cron() {
+  user_delete_backup_scan_expired();
+}
+
+/**
+ * Backup an user/node/comment object to the filesystem
+ */
+function user_delete_backup($account, $object = NULL) {
+  // check for directory
+  $dir = USER_DELETE_FILE_PATH;
+  file_check_directory($dir, TRUE);
+  
+  file_check_directory($dir, TRUE);
+  $backup_dir = $dir .'/'. check_plain($account->name);
+  file_check_directory($backup_dir, TRUE);
+  
+  if (is_numeric($object->cid)) {
+    $dest = $backup_dir . '/comments';
+    file_check_directory($dest, TRUE);
+    $dest = $dest . '/comment-' . $object->cid . '.txt';
+  }
+  else if (is_numeric($object->nid)) {
+    $dest = $backup_dir . '/nodes';
+    file_check_directory($dest, TRUE);
+    $dest = $dest . '/node-' . $object->nid . '.txt';
+  }
+  else {
+    $dest = $backup_dir;
+    $object = $account;
+    file_check_directory($dest, TRUE);
+    $dest = $dest . '/user-' . $object->uid . '.txt';
+  }
+  
+  $data = serialize((array) $object);
+  file_save_data($data, $dest, FILE_EXISTS_REPLACE);
+}
+
+/**
+ * Scan for and delete expired files
+ */
+function user_delete_backup_scan_expired() {
+  // check for directory
+  $dir = USER_DELETE_FILE_PATH;
+  if (file_check_directory($dir, TRUE)) {  
+    file_scan_directory($dir, '.*', array('.', '..', 'CVS'), 'user_delete_backup_remove_expired', FALSE);
+  }
+}
+
+/**
+ * Check if a folder is expired and delete
+ */
+function user_delete_backup_remove_expired($filename) {
+  $period = variable_get('user_delete_backup_period', 60*60*24*7*12);
+  $created = filemtime($filename);
+  if ($created && (time() >= ($created + $period))) {
+    user_delete_backup_remove_dir($filename);
+  }
+}
+
+/**
+ * Recursive delete a folder with files
+ */
+function user_delete_backup_remove_dir($dir) {
+  if (!file_exists($dir)) {
+    return true;
+  }
+  if (!is_dir($dir)) {
+    return unlink($dir);
+  }
+  foreach (scandir($dir) as $item) {
+    if ($item == '.' || $item == '..') {
+      continue;
+    }
+    if (!user_delete_backup_remove_dir($dir.DIRECTORY_SEPARATOR.$item)) {
+      return false;
+    }
+  }
+  return rmdir($dir);
 }
