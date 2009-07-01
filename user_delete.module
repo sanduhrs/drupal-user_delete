@@ -313,6 +313,7 @@ function user_delete_node_delete($nid) {
 
 /**
  * Copy of file_check_directory() without drupal_set_message().
+ * see http://api.drupal.org/api/function/file_check_directory/5
  */
 function user_delete_file_check_directory(&$directory, $mode = 0, $form_item = NULL) {
   $directory = rtrim($directory, '/\\');
