@@ -1,20 +1,18 @@
 <?php
-/* $Id$ */
+// $Id$
 
 /**
- * User delete
- * 
  * @file
- * Let users delete their own account.
+ * User delete - Let users delete their own account.
  *
  * This module will be abandoned when http://drupal.org/node/8 is fixed.
- * 
+ *
  * Note: As of January 8, 2009 - 09:44 the issue is marked as fixed.
  * And commited to Drupal 7, see http://drupal.org/node/8#comment-1188824
  *
  * @author
  * Stefan Auditor <stefan.auditor@erdfisch.de>
- * 
+ *
  * TODO:
  * Double check comment backup function
  * Allow to admin defined a default setting for normal users
@@ -64,9 +62,9 @@ function user_delete_menu($may_cache) {
 function user_delete_form_alter($form_id, &$form) {
   global $user;
 
-  if($form_id == 'user_edit') {
+  if ($form_id == 'user_edit') {
     //access check
-    if(user_access('delete own account') && arg(1) == $user->uid) {
+    if (user_access('delete own account') && arg(1) == $user->uid) {
       $form['delete'] = array(
         '#type' => 'submit',
         '#value' => t('Delete'),
@@ -74,7 +72,7 @@ function user_delete_form_alter($form_id, &$form) {
       );
     }
   }
-  
+
   if ($form_id == 'user_confirm_delete') {
     $backup = variable_get('user_delete_backup', 0);
     if ($backup) {
@@ -110,13 +108,13 @@ function user_delete_submit($form_id, $form_values) {
   $uid = $form_values['uid'];
   $account = user_load(array('uid' => $uid));
   $backup = variable_get('user_delete_backup', 0);
-  
+
   if (!$account) {
     drupal_set_message(t('The user account %id does not exist.', array('%id' => $uid)), 'error');
     watchdog('user', 'Attempted to cancel non-existing user account: %id.', array('%id' => $uid), WATCHDOG_ERROR);
     return;
   }
-  
+
   switch ($op) {
     case 'user_delete_block':
       // block user
@@ -129,28 +127,28 @@ function user_delete_submit($form_id, $form_values) {
       // unpublish content
       db_query("UPDATE {node} SET status = 0 WHERE uid = %d", $uid);
       db_query("UPDATE {comments} SET status = 1 WHERE uid = %d", $uid);
-      
+
       drupal_set_message(t('%name has been blocked, all submitted content from that user has been unpublished.', array('%name' => check_plain($account->name))));
       break;
     case 'user_delete_reassign':
       // Set redirect
       $redirect = variable_get('user_delete_redirect', 'node');
-      
+
       // reassign content
       db_query("UPDATE {node} SET uid = 0 WHERE uid = %d", $uid);
       db_query("UPDATE {comments} SET uid = 0 WHERE uid = %d", $uid);
       // delete account
       user_delete($form_values, $uid);
-      
+
       drupal_set_message(t('User record deleted. All submitted content from %name has been reassigned to %anonymous.', array('%name' => check_plain($account->name), '%anonymous' => variable_get('anonymous', t('Anonymous')))));
       break;
     case 'user_delete_delete':
       // TODO: Deleting/Backing-up nodes and comments should be done with
       // http://drupal.org/project/batchapi
-      
+
       // Set redirect
       $redirect = variable_get('user_delete_redirect', 'node');
-      
+
       // delete comments
       $result = db_query("SELECT cid FROM {comments} WHERE uid = %d", $uid);
       while ($row = db_fetch_object($result)) {
@@ -177,13 +175,13 @@ function user_delete_submit($form_id, $form_values) {
       }
       // delete user
       user_delete($form_values, $uid);
-      
+
       drupal_set_message(t('User record deleted. All submitted content from %name has been deleted.', array('%name' => check_plain($account->name), '!anonymous' => variable_get('anonymous', t('Anonymous')))));
       break;
   }
 
   // After cancelling account, ensure that user is logged out.
-  
+
   // Destroy the current session.
   db_query("DELETE FROM {sessions} WHERE uid = %d", $account->uid);
   if ($account->uid == $user->uid) {
@@ -195,7 +193,7 @@ function user_delete_submit($form_id, $form_values) {
 
   // Clear the cache for anonymous users.
   cache_clear_all();
-  
+
   // Redirect
   if (!empty($redirect)) {
     drupal_goto($redirect);
@@ -216,11 +214,11 @@ function user_delete_backup($account, $object = NULL) {
   // check for directory
   $dir = USER_DELETE_FILE_PATH;
   user_delete_file_check_directory($dir, TRUE);
-  
+
   file_check_directory($dir, TRUE);
   $backup_dir = $dir .'/'. check_plain($account->name);
   user_delete_file_check_directory($backup_dir, TRUE);
-  
+
   if (is_numeric($object->cid)) {
     $dest = $backup_dir . '/comments';
     user_delete_file_check_directory($dest, TRUE);
@@ -237,7 +235,7 @@ function user_delete_backup($account, $object = NULL) {
     user_delete_file_check_directory($dest, TRUE);
     $dest = $dest . '/user-' . $object->uid . '.txt';
   }
-  
+
   $data = serialize((array) $object);
   file_save_data($data, $dest, FILE_EXISTS_REPLACE);
 }
@@ -248,7 +246,7 @@ function user_delete_backup($account, $object = NULL) {
 function user_delete_backup_scan_expired() {
   // check for directory
   $dir = USER_DELETE_FILE_PATH;
-  if (file_check_directory($dir, TRUE)) {  
+  if (file_check_directory($dir, TRUE)) {
     file_scan_directory($dir, '.*', array('.', '..', 'CVS'), 'user_delete_backup_remove_expired', FALSE);
   }
 }
@@ -269,7 +267,7 @@ function user_delete_backup_remove_expired($filename) {
  */
 function user_delete_backup_remove_dir($dir) {
   if (!file_exists($dir)) {
-    return true;
+    return TRUE;
   }
   if (!is_dir($dir)) {
     return unlink($dir);
@@ -278,8 +276,8 @@ function user_delete_backup_remove_dir($dir) {
     if ($item == '.' || $item == '..') {
       continue;
     }
-    if (!user_delete_backup_remove_dir($dir.DIRECTORY_SEPARATOR.$item)) {
-      return false;
+    if (!user_delete_backup_remove_dir($dir . DIRECTORY_SEPARATOR . $item)) {
+      return FALSE;
     }
   }
   return rmdir($dir);
@@ -292,7 +290,7 @@ function user_delete_backup_remove_dir($dir) {
 function user_delete_node_delete($nid) {
 
   $node = node_load($nid);
-  
+
   db_query('DELETE FROM {node} WHERE nid = %d', $node->nid);
   db_query('DELETE FROM {node_revisions} WHERE nid = %d', $node->nid);
 
@@ -367,7 +365,7 @@ function user_delete_file_check_directory(&$directory, $mode = 0, $form_item = N
  *   a form array
  */
 function user_delete_settings() {
-  
+
   //TODO: add additional settings based on http://drupal.org/node/8#comment-628434
   $form['redirect'] = array(
     '#type' => 'fieldset',
