@@ -130,7 +130,7 @@ function user_delete_submit($form_id, $form_values) {
       db_query("UPDATE {node} SET status = 0 WHERE uid = %d", $uid);
       db_query("UPDATE {comments} SET status = 1 WHERE uid = %d", $uid);
       
-      drupal_set_message(t('%name has been blocked, all submitted content from that user has benn unpublished.', array('%name' => check_plain($account->name))));
+      drupal_set_message(t('%name has been blocked, all submitted content from that user has been unpublished.', array('%name' => check_plain($account->name))));
       break;
     case 'user_delete_reassign':
       // Set redirect
@@ -142,7 +142,7 @@ function user_delete_submit($form_id, $form_values) {
       // delete account
       user_delete($form_values, $uid);
       
-      drupal_set_message(t('All submitted content from %name has benn reassigned to %anonymous.', array('%name' => check_plain($account->name), '%anonymous' => variable_get('anonymous', t('Anonymous')))));
+      drupal_set_message(t('User record deleted. All submitted content from %name has been reassigned to %anonymous.', array('%name' => check_plain($account->name), '%anonymous' => variable_get('anonymous', t('Anonymous')))));
       break;
     case 'user_delete_delete':
       // TODO: Deleting/Backing-up nodes and comments should be done with
@@ -178,7 +178,7 @@ function user_delete_submit($form_id, $form_values) {
       // delete user
       user_delete($form_values, $uid);
       
-      drupal_set_message(t('All submitted content from %name has been deleted.', array('%name' => check_plain($account->name), '!anonymous' => variable_get('anonymous', t('Anonymous')))));
+      drupal_set_message(t('User record deleted. All submitted content from %name has been deleted.', array('%name' => check_plain($account->name), '!anonymous' => variable_get('anonymous', t('Anonymous')))));
       break;
   }
 
