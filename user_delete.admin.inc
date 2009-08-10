@@ -1,10 +1,11 @@
 <?php
-/* $Id$ */
+// $Id$
 
 /**
- * User delete
- * 
- * @author 
+ * @file
+ * User delete - Administration page
+ *
+ * @author
  * Stefan Auditor <stefan.auditor@erdfisch.de>
  */
 
