@@ -23,3 +23,13 @@ function user_delete_install() {
       break;
   }
 }
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function user_delete_uninstall() {
+  variable_del('user_delete_redirect');
+  variable_del('user_delete_backup');
+  variable_del('user_delete_backup_period');
+  variable_del('user_delete_default_action');
+}
