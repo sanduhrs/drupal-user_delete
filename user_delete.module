@@ -134,9 +134,6 @@ function user_delete_submit($form_id, $form_values) {
       // Set redirect
       $redirect = variable_get('user_delete_redirect', 'node');
 
-      // reassign content
-      db_query("UPDATE {node} SET uid = 0 WHERE uid = %d", $uid);
-      db_query("UPDATE {comments} SET uid = 0 WHERE uid = %d", $uid);
       // delete account
       user_delete($form_values, $uid);
 
