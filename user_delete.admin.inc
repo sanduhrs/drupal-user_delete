@@ -17,6 +17,22 @@
  */
 function user_delete_settings() {
   //TODO: add additional settings based on http://drupal.org/node/8#comment-628434
+  $form['defaults'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Defaults'),
+  );
+  $form['defaults']['user_delete_default_action'] = array(
+    '#type' => 'select',
+    '#title' => t('Default action when deleting'),
+    '#default_value' => variable_get('user_delete_default_action', 0),
+    '#options' => array(
+        0 => t('Let users choose action'),
+        'user_delete_block' => t('Disable the account and keep all content.'),
+        'user_delete_block_unpublish' => t('Disable the account and unpublish all content.'),
+        'user_delete_reassign' => t('Delete the account and make all content belong to the <em>Anonymous user</em>.'),
+        'user_delete_delete' => t('Delete the account and all content.'),
+      ),
+  );
   $form['redirect'] = array(
     '#type' => 'fieldset',
     '#title' => t('Redirect'),
