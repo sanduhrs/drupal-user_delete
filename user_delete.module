@@ -67,7 +67,7 @@ function user_delete_form_alter($form_id, &$form) {
     if (user_access('delete own account') && arg(1) == $user->uid) {
       $form['delete'] = array(
         '#type' => 'submit',
-        '#value' => t('Delete'),
+        '#value' => t('Delete Account'),
         '#weight' => 31,
       );
     }
