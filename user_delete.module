@@ -64,36 +64,60 @@ function user_delete_form_alter($form_id, &$form) {
 
   if ($form_id == 'user_edit') {
     //access check
-    if (user_access('delete own account') && arg(1) == $user->uid) {
+    if (user_access('delete own account') && $form['_account']['#value']->uid == $user->uid) {
       $form['delete'] = array(
         '#type' => 'submit',
-        '#value' => t('Delete Account'),
+        '#value' => t('Delete'),
         '#weight' => 31,
       );
     }
   }
 
   if ($form_id == 'user_confirm_delete') {
-    $backup = variable_get('user_delete_backup', 0);
-    if ($backup) {
-      $period = variable_get('user_delete_backup_period', 60*60*24*7*12);
+    $description = '';
+    $default_op = variable_get('user_delete_default_action', 0);
+    if ($default_op) {
+      switch ($default_op) {
+        case 'user_delete_block':
+          $description = t('The account will be disabled, all submitted content will be kept.');
+          break;
+        case 'user_delete_block_unpublish':
+          $description = t('The account will be disabled, all submitted content will be unpublished.');
+          break;
+        case 'user_delete_reassign':
+          $description = t('The account will be deleted, all submitted content will be reassigned to the <em>Anonymous user</em>. This action cannot be undone.');
+          break;
+        case 'user_delete_delete':
+          $description = t('The account and all submitted content will be deleted. This action cannot be undone.');
+          break;
+      }
+  
+      $form['description'] = array(
+        '#value' => $description,
+        '#weight' => -10,
+      );
+    }
+
+    if (variable_get('user_delete_backup', 0)) {
       $form['user_delete_remark'] = array(
-        '#value' => t('All data that is being deleted will be backed up for %period and automatically deleted afterwards.', array('%period' => format_interval($period, 2))),
+        '#value' => t('All data that is being deleted will be backed up for %period and automatically deleted afterwards.', array('%period' => format_interval(variable_get('user_delete_backup_period', 60*60*24*7*12), 2))),
         '#weight' => 0,
       );
     }
-    $form['user_delete_action'] = array(
-      '#type' => 'radios',
-      '#title' => t('When deleting the account'),
-      '#default_value' => 'user_delete_block',
-      '#options' => array(
-        'user_delete_block' => t('Disable the account and keep all content.'),
-        'user_delete_block_unpublish' => t('Disable the account and unpublish all content.'),
-        'user_delete_reassign' => t('Delete the account and make all content belong to the <em>Anonymous user</em>.'),
-        'user_delete_delete' => t('Delete the account and all content.'),
+    if (!variable_get('user_delete_default_action', 0)) {
+      $form['user_delete_action'] = array(
+        '#type' => 'radios',
+        '#title' => t('When deleting the account'),
+        '#default_value' => 'user_delete_block',
+        '#options' => array(
+          'user_delete_block' => t('Disable the account and keep all content.'),
+          'user_delete_block_unpublish' => t('Disable the account and unpublish all content.'),
+          'user_delete_reassign' => t('Delete the account and make all content belong to the <em>Anonymous user</em>.'),
+          'user_delete_delete' => t('Delete the account and all content.'),
       ),
-      '#weight' => 0,
-    );
+        '#weight' => 0,
+      );
+    }
     $form['#redirect'] = 'user/' . $form['uid']['#value'];
     $form['#submit'] = array('user_delete_submit' => array());
   }
@@ -104,7 +128,8 @@ function user_delete_form_alter($form_id, &$form) {
  */
 function user_delete_submit($form_id, $form_values) {
   global $user;
-  $op = $form_values['user_delete_action'];
+  $default_op = variable_get('user_delete_default_action', 0);
+  $op = ($default_op) ? $default_op : $form_values['user_delete_action'];
   $uid = $form_values['uid'];
   $account = user_load(array('uid' => $uid));
   $backup = variable_get('user_delete_backup', 0);
@@ -364,6 +389,22 @@ function user_delete_file_check_directory(&$directory, $mode = 0, $form_item = N
 function user_delete_settings() {
 
   //TODO: add additional settings based on http://drupal.org/node/8#comment-628434
+  $form['defaults'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Defaults'),
+  );
+  $form['defaults']['user_delete_default_action'] = array(
+    '#type' => 'select',
+    '#title' => t('Default action when deleting'),
+    '#default_value' => variable_get('user_delete_default_action', 0),
+    '#options' => array(
+      0 => t('Let users choose action'),
+      'user_delete_block' => t('Disable the account and keep all content.'),
+      'user_delete_block_unpublish' => t('Disable the account and unpublish all content.'),
+      'user_delete_reassign' => t('Delete the account and make all content belong to the <em>Anonymous user</em>.'),
+      'user_delete_delete' => t('Delete the account and all content.'),
+    ),
+  );
   $form['redirect'] = array(
     '#type' => 'fieldset',
     '#title' => t('Redirect'),
