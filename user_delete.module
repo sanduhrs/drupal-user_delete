@@ -179,7 +179,7 @@ function user_delete_submit($form_id, $form_values) {
           $comment = _comment_load($row->cid);
           user_delete_backup($account, $comment);
         }
-        comment_delete($row->cid);
+        user_delete_comment_delete($row->cid);
       }
       // delete nodes
       $result = db_query("SELECT nid FROM {node} WHERE uid = %d", $uid);
@@ -442,4 +442,13 @@ function user_delete_settings() {
     '#description' => t('The time frame after which the backup should be deleted from the filesystem.'),
   );
   return system_settings_form($form);
+}
+
+/**
+ * Delete comment thread
+ */
+function user_delete_comment_delete($cid = NULL) {
+  $comment = db_fetch_object(db_query('SELECT c.*, u.name AS registered_name, u.uid FROM {comments} c INNER JOIN {users} u ON u.uid = c.uid WHERE c.cid = %d', $cid));
+  _comment_delete_thread($comment);
+  _comment_update_node_statistics($comment->nid);
 }
