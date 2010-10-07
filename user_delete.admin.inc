@@ -6,7 +6,7 @@
  * User delete - Administration page
  *
  * @author
- * Stefan Auditor <stefan.auditor@erdfisch.de>
+ * ilo <inaki.lopez@gmail.com>
  */
 
 /**
@@ -16,58 +16,111 @@
  *   a form array
  */
 function user_delete_settings() {
-  //TODO: add additional settings based on http://drupal.org/node/8#comment-628434
-  $form['defaults'] = array(
+
+  // These email tokens are shared for all settings, so just define
+  // the list once to help ensure they stay in sync.
+  $email_token_help = t('Available variables are:') .' !username, !site, !password, !uri, !uri_brief, !mailto, !date, !login_uri, !edit_uri, !login_url.';
+
+  $form['registration_cancellation'] = array(
     '#type' => 'fieldset',
-    '#title' => t('Defaults'),
+    '#title' => t('Settings for account cancellation'),
   );
-  $form['defaults']['user_delete_default_action'] = array(
-    '#type' => 'select',
-    '#title' => t('Default action when deleting'),
-    '#default_value' => variable_get('user_delete_default_action', 0),
-    '#options' => array(
-        0 => t('Let users choose action'),
-        'user_delete_block' => t('Disable the account and keep all content.'),
-        'user_delete_block_unpublish' => t('Disable the account and unpublish all content.'),
-        'user_delete_reassign' => t('Delete the account and make all content belong to the Anonymous user.'),
-        'user_delete_delete' => t('Delete the account and all content.'),
-      ),
+
+  $form['registration_cancellation']['user_cancel_method'] = array(
+    '#type' => 'item',
+    '#title' => t('When cancelling a user account'),
+    '#description' => t('Users with the %select-cancel-method or %administer-users <a href="@permissions-url">permissions</a> can override this default method.', array('%select-cancel-method' => t('Select method for cancelling account'), '%administer-users' => t('Administer users'), '@permissions-url' => url('admin/user/permissions'))),
   );
-  $form['redirect'] = array(
+  
+  $form['registration_cancellation']['user_cancel_method'] += user_delete_cancel_methods();
+  foreach (element_children($form['registration_cancellation']['user_cancel_method']) as $element) {
+    // Remove all account cancellation methods that have #access defined, as
+    // those cannot be configured as default method.
+    if (isset($form['registration_cancellation']['user_cancel_method'][$element]['#access'])) {
+      $form['registration_cancellation']['user_cancel_method'][$element]['#access'] = FALSE;
+    }
+    // Remove the description (only displayed on the confirmation form).
+    else {
+      unset($form['registration_cancellation']['user_cancel_method'][$element]['#description']);
+    }
+  }
+
+  $form['email_cancel_confirm'] = array(
     '#type' => 'fieldset',
-    '#title' => t('Redirect'),
+    '#title' => t('Account cancellation confirmation'),
+    '#collapsible' => TRUE,
+    '#collapsed' => TRUE,
+    '#description' => t('Edit the e-mail messages sent to users when they attempt to cancel their accounts.') . ' ' . $email_token_help,
   );
-  $form['redirect']['user_delete_redirect'] = array(
+  $form['email_cancel_confirm']['user_mail_cancel_confirm_subject'] = array(
     '#type' => 'textfield',
-    '#title' => t('Redirection page'),
-    '#default_value' => variable_get('user_delete_redirect', ''),
-    '#description' => t('Choose where to redirect your users after account deletion. Any valid Drupal path will do, e.g. %front or %node', array('%front' => '<front>', '%node' => 'node/1')),
+    '#title' => t('Subject'),
+    '#default_value' => _user_delete_mail_text('cancel_confirm_subject'),
+    '#maxlength' => 180,
   );
-  $form['backup'] = array(
+  $form['email_cancel_confirm']['user_mail_cancel_confirm_body'] = array(
+    '#type' => 'textarea',
+    '#title' => t('Body'),
+    '#default_value' => _user_delete_mail_text('cancel_confirm_body'),
+    '#rows' => 3,
+  );
+
+  $form['email_canceled'] = array(
     '#type' => 'fieldset',
-    '#title' => t('Backup'),
+    '#title' => t('Account canceled'),
+    '#collapsible' => TRUE,
+    '#collapsed' => TRUE,
+    '#description' => t('Enable and edit e-mail messages sent to users when their accounts are canceled.') . ' ' . $email_token_help,
   );
-  $form['backup']['user_delete_backup'] = array(
+  $form['email_canceled']['user_mail_status_canceled_notify'] = array(
     '#type' => 'checkbox',
-    '#title' => t('Backup data'),
-    '#default_value' => variable_get('user_delete_backup', 0),
-    '#description' => t('Backup data that is being deleted to the filesystem.'),
+    '#title' => t('Notify user when account is canceled.'),
+    '#default_value' => variable_get('user_mail_status_canceled_notify', FALSE),
   );
-  $options = array(
-    60*60*24*7 => format_interval(60*60*24*7, 2),
-    60*60*24*7*2 => format_interval(60*60*24*7*2, 2),
-    60*60*24*7*4 => format_interval(60*60*24*7*4, 2),
-    60*60*24*7*8 => format_interval(60*60*24*7*8, 2),
-    60*60*24*7*12 => format_interval(60*60*24*7*12, 2),
-    60*60*24*7*16 => format_interval(60*60*24*7*16, 2),
-    60*60*24*7*24 => format_interval(60*60*24*7*24, 2),
+  $form['email_canceled']['user_mail_status_canceled_subject'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Subject'),
+    '#default_value' => _user_delete_mail_text('status_canceled_subject'),
+    '#maxlength' => 180,
   );
-  $form['backup']['user_delete_backup_period'] = array(
-    '#type' => 'select',
-    '#title' => t('Keep backup time'),
-    '#default_value' => variable_get('user_delete_backup_period', 60*60*24*7*12),
-    '#options' => $options,
-    '#description' => t('The time frame after which the backup should be deleted from the filesystem.'),
+  $form['email_canceled']['user_mail_status_canceled_body'] = array(
+    '#type' => 'textarea',
+    '#title' => t('Body'),
+    '#default_value' => _user_delete_mail_text('status_canceled_body'),
+    '#rows' => 3,
   );
+
   return system_settings_form($form);
+}
+
+/**
+ * Return subject and body strings for default _user_mail_notify function.
+ * @param <type> $key
+ * @param <type> $language
+ * @param <type> $variables
+ * @return <type>
+ */
+function _user_delete_mail_text($key, $language = NULL, $variables = array()) {
+  $langcode = isset($language) ? $language->language : NULL;
+
+  if ($admin_setting = variable_get('user_mail_'. $key, FALSE)) {
+    // An admin setting overrides the default string.
+    return strtr($admin_setting, $variables);
+  }
+  else {
+    // No override, return default string.
+    switch ($key) {
+      case 'cancel_confirm_subject':
+        return t('Account cancellation request for !username at !site', $variables, $langcode);
+        break;
+      case 'cancel_confirm_body':
+        return t("!username,\n\nA request to cancel your account has been made at !site.\n\nYou may now cancel your account on !uri_brief by clicking this link or copying and pasting it into your browser:\n\n!cancelurl\n\nNOTE: The cancellation of your account is not reversible.\n\nThis link expires in one day and nothing will happen if it is not used.\n\n\n--  !site team", $variables, $langcode);
+      case 'status_canceled_subject':
+        return t('Account details for !username at !site (canceled)', $variables, $langcode);
+      case 'status_canceled_body':
+        return t("!username,\n\nYour account on !site has been canceled.\n\n\n--  !site team", $variables, $langcode);
+        break;
+    }
+  }
+
 }

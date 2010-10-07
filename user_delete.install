@@ -5,8 +5,6 @@
  * @file
  * User delete - Installation routines
  *
- * @author
- * Stefan Auditor <stefan.auditor@erdfisch.de>
  */
 
 /**
@@ -26,10 +24,7 @@ function user_delete_install() {
 
 /**
  * Implementation of hook_uninstall().
+ * @TODO: Not yet implemented.
  */
 function user_delete_uninstall() {
-  variable_del('user_delete_redirect');
-  variable_del('user_delete_backup');
-  variable_del('user_delete_backup_period');
-  variable_del('user_delete_default_action');
 }

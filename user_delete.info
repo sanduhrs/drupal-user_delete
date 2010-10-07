@@ -1,4 +1,4 @@
 ; $Id$
-name         = User Delete
-description  = "Let users delete their own account."
+name         = User delete
+description  = "Backport of D7 account cancellation API and code."
 core = 6.x
