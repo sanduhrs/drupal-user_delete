@@ -504,10 +504,10 @@ function user_delete_cancel_url($account) {
  */
 function user_delete_mail_alter(&$message) {
   if ($message['id'] == 'user_cancel_confirm') {
+    $user_cancel_url = user_delete_cancel_url($message['params']['account']);
     if (is_array($message['body'])) {
       foreach($message['body'] as $id => $content) {
-        $message['body'][$id] = str_replace('!cancelurl', user_delete_cancel_url($message['params']['account']) , $message['body'][$id]);
-        drupal_set_message($message['body'][$id]);
+        $message['body'][$id] = str_replace('!cancelurl', $user_cancel_url, $message['body'][$id]);
       }
     }
     else {  // Some modules use the body as a string, erroneously.
