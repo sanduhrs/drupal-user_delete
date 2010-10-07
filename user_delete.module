@@ -1110,7 +1110,7 @@ function _user_delete_comment_mass_delete_batch_process($comments, &$context) {
   for ($i = 1; $i <= $count; $i++) {
     // For each nid, load the node, reset the values, and save it.
     $cid = array_shift($context['sandbox']['comments']);
-    $comment = _user_delete_comment_mass_update_helper($cid, $updates);
+    $comment = _user_delete_comment_mass_delete_helper($cid);
 
     // Store result for post-processing in the finished callback.
     $context['results'][] = l( isset($comment->subject) ? $comment->subject : $comment->cid , 'node/'. $comment->nid, array('fragment' => 'comment-'. $comment->cid));
