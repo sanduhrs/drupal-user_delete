@@ -506,7 +506,7 @@ function user_delete_mail_alter(&$message) {
   if ($message['id'] == 'user_cancel_confirm') {
     $user_cancel_url = user_delete_cancel_url($message['params']['account']);
     if (is_array($message['body'])) {
-      foreach($message['body'] as $id => $content) {
+      foreach ($message['body'] as $id => $content) {
         $message['body'][$id] = str_replace('!cancelurl', $user_cancel_url, $message['body'][$id]);
       }
     }
@@ -568,7 +568,7 @@ function user_delete_node_cancel($edit, $account, $method) {
       // Unpublish nodes (current revisions).
       $result = db_query("SELECT nid FROM {node} WHERE uid = %d", $account->uid);
       $nodes = array();
-      while ($nid = db_result($result)){
+      while ($nid = db_result($result)) {
         $nodes[] = $nid;
       };
       user_delete_node_mass_update($nodes, array('status' => 0));
@@ -577,12 +577,12 @@ function user_delete_node_cancel($edit, $account, $method) {
       // Anonymize nodes (current revisions).
       $result = db_query("SELECT nid FROM {node} WHERE uid = %d", $account->uid);
       $nodes = array();
-      while ($nid = db_result($result)){
+      while ($nid = db_result($result)) {
         $nodes[] = $nid;
       };
       user_delete_node_mass_update($nodes, array('uid' => 0));
       // Anonymize old revisions.
-      db_query("UPDATE {node_revision} SET uid = 0 WHERE uid = %d", $account->uid);
+      db_query("UPDATE {node_revisions} SET uid = 0 WHERE uid = %d", $account->uid);
       // Anonymize history
       db_query("UPDATE {history} SET uid = 0 WHERE uid = %d", $account->uid);
       break;
@@ -590,7 +590,7 @@ function user_delete_node_cancel($edit, $account, $method) {
       // Anonymize nodes (current revisions).
       $result = db_query("SELECT nid FROM {node} WHERE uid = %d", $account->uid);
       $nodes = array();
-      while ($nid = db_result($result)){
+      while ($nid = db_result($result)) {
         $nodes[] = $nid;
       };
       user_delete_node_mass_delete($nodes);
@@ -853,7 +853,7 @@ function user_delete_comment_cancel($edit, $account, $method) {
       // Unpublish comments.
       $result = db_query("SELECT cid FROM {comments} WHERE uid = %d", $account->uid);
       $cids = array();
-      while ($cid = db_result($result)){
+      while ($cid = db_result($result)) {
         $cids[] = $cid;
       };
       // Set status to 1 put into moderation queue.
@@ -864,7 +864,7 @@ function user_delete_comment_cancel($edit, $account, $method) {
       // Anonymize comments.
       $result = db_query("SELECT cid FROM {comments} WHERE uid = %d", $account->uid);
       $cids = array();
-      while ($cid = db_result($result)){
+      while ($cid = db_result($result)) {
         $cids[] = $cid;
       };
       user_delete_comment_mass_update($cids, array('uid' => 0));
@@ -873,7 +873,7 @@ function user_delete_comment_cancel($edit, $account, $method) {
       // delete comments.
       $result = db_query("SELECT cid FROM {comments} WHERE uid = %d", $account->uid);
       $cids = array();
-      while ($cid = db_result($result)){
+      while ($cid = db_result($result)) {
         $cids[] = $cid;
       };
       user_delete_comment_mass_delete($cids);
@@ -957,7 +957,7 @@ function _user_delete_comment_save($comment) {
     if (isset($result) && is_array($result)) {
       $return = array_merge($return, $result);
     }
-    else if (isset($result)) {
+    elseif (isset($result)) {
       $return[] = $result;
     }
   }
@@ -1082,7 +1082,7 @@ function _user_delete_comment_delete_thread($comment) {
     if (isset($result) && is_array($result)) {
       $return = array_merge($return, $result);
     }
-    else if (isset($result)) {
+    elseif (isset($result)) {
       $return[] = $result;
     }
   }
