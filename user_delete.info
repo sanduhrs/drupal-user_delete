@@ -1,4 +1,3 @@
-; $Id$
 name         = User delete
 description  = "Backport of D7 account cancellation API and code."
 core = 6.x
