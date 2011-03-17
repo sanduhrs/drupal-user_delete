@@ -155,7 +155,8 @@ function user_delete_submit($form, &$form_state) {
       // unpublish content
       db_query("UPDATE {node} SET status = 0 WHERE uid = %d", $uid);
       db_query("UPDATE {comments} SET status = 1 WHERE uid = %d", $uid);
-
+      $edit['status'] = 0;
+      module_invoke_all('user', 'update', $edit, $account);
       drupal_set_message(t('%name has been blocked, all submitted content from that user has been unpublished.', array('%name' => check_plain($account->name))));
       break;
     case 'user_delete_reassign':
